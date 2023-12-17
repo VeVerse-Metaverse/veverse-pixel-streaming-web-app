@@ -1,0 +1,81 @@
+# app deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  labels:
+    app: {{ .Chart.Name }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+    spec:
+      imagePullSecrets:
+        - name: registrysecret
+      containers:
+        - name: api
+          image: {{ .Values.werf.image.api }}
+          env:
+            - name: ENVIRONMENT
+              value: {{ .Values.global.env | default "dev" }}
+
+# Cluster IP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Chart.Name }}
+spec:
+  selector:
+    app: {{ .Chart.Name }}
+  clusterIP: None
+  ports:
+    - name: http-app
+      port: 8080
+  type: ClusterIP
+
+# Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "3000m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+  name: {{ .Chart.Name }}
+spec:
+  rules:
+    - host: {{ .Values.global.ci_url }}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {{ .Chart.Name }}
+                port:
+                  name: http-app
+            path: /
+            pathType: Prefix
+#  tls:
+#    - hosts:
+#        - {{ .Values.global.ci_url }}
+#      secretName: ingress-tls
+
+# HTTPS certificate manager
+#---
+#apiVersion: cert-manager.io/v1
+#kind: Certificate
+#metadata:
+#  name: {{ .Chart.Name }}
+#spec:
+#  dnsNames:
+#    - {{ .Values.global.ci_url }}
+#  issuerRef:
+#    kind: ClusterIssuer
+#    name: letsencrypt
+#  secretName: ingress-tls
